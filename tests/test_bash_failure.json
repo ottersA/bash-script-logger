@@ -1,0 +1,1 @@
+{"session_id": "test-session-001", "tool_name": "Bash", "tool_input": {"command": "npm run build"}, "tool_output": {"stdout": "", "stderr": "Error: Cannot find module 'webpack'", "exit_code": 1}}

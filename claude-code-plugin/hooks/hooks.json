@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/capture-prompt.sh",
+            "args": [],
+            "timeout": 5,
+            "statusMessage": "Bash Script Logger: capturing prompt..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/log-bash.sh",
+            "args": [],
+            "timeout": 10,
+            "statusMessage": "Bash Script Logger: logging bash command..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+{"session_id": "test-session-001", "tool_name": "Bash", "tool_input": {"command": "find . -name '*.py' | xargs grep 'import os'"}, "tool_output": {"stdout": "src/main.py:import os\nsrc/utils.py:import os\n", "stderr": "", "exit_code": 0}}

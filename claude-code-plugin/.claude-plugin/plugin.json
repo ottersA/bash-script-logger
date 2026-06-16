@@ -1,0 +1,8 @@
+{
+  "name": "bash-script-logger",
+  "description": "Bash Script Logger collects telemetry on every bash script an AI agent generates and runs, capturing commands, outputs, user prompts, and metadata for research analysis.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Micha"
+  }
+}

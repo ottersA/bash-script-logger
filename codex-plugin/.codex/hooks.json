@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.codex/hooks/capture-prompt.sh",
+            "timeout": 5,
+            "statusMessage": "Bash Script Logger: capturing prompt..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.codex/hooks/log-bash.sh",
+            "timeout": 10,
+            "statusMessage": "Bash Script Logger: logging bash command..."
+          }
+        ]
+      }
+    ]
+  }
+}
