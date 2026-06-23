@@ -26,6 +26,19 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/capture-context.sh",
+            "args": [],
+            "timeout": 15,
+            "statusMessage": "Bash Script Logger: capturing file context..."
+          }
+        ]
+      }
     ]
   }
 }

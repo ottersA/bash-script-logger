@@ -1,10 +1,10 @@
 ---
-description: Generate a summary report of collected telemetry data from ~/.bash-script-logger/telemetry.jsonl. Use when the user wants to see statistics about bash commands that have been logged.
+description: Generate a summary report of collected telemetry data from ~/.claude/bash_tracing/telemetry.jsonl and ~/.codex/bash_tracing/telemetry.jsonl. Use when the user wants to see statistics about bash commands that have been logged.
 ---
 
 # Bash Script Logger Telemetry Report
 
-Read the file `~/.bash-script-logger/telemetry.jsonl`. Each line is a JSON object representing one bash command that was executed during an AI agent session.
+Read the telemetry files at `~/.claude/bash_tracing/telemetry.jsonl` and `~/.codex/bash_tracing/telemetry.jsonl`. Each line is a JSON object representing one bash command that was executed during an AI agent session.
 
 ## Fields in each entry:
 - `timestamp`: when the command ran (UTC)

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.codex/hooks/capture-prompt.sh",
+            "command": "<HOME>/.codex/hooks/capture-prompt.sh",
             "timeout": 5,
             "statusMessage": "Bash Script Logger: capturing prompt..."
           }
@@ -18,9 +18,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.codex/hooks/log-bash.sh",
+            "command": "<HOME>/.codex/hooks/log-bash.sh",
             "timeout": 10,
             "statusMessage": "Bash Script Logger: logging bash command..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<HOME>/.codex/hooks/capture-context.sh",
+            "timeout": 15,
+            "statusMessage": "Bash Script Logger: capturing file context..."
           }
         ]
       }

@@ -1,77 +1,69 @@
 # Bash Script Logger — Agent Tool-use Logging & Analysis System
 
-**Bash Script Logger** silently instruments the bash commands that AI coding agents generate and run. It captures the command text, output, exit codes, and the user's original prompt — then writes structured telemetry to a JSONL log file for later analysis.
+**Bash Script Logger** silently instruments the bash commands that AI coding agents (Claude Code and Codex) generate and run. It captures the command text, output, the user's original prompt, and file context—then writes structured telemetry for later analysis.
 
 ## Why?
 
 Both Claude Code and Codex generate raw shell commands on the fly. Neither agent optimizes the scripts it produces. Bash Script Logger collects the data to **prove** this is a problem and **measure** it.
 
-## Quick Start (Claude Code)
+## Features
 
-### Prerequisites
+- **Multi-Agent Support:** Works natively with both Claude Code and OpenAI Codex CLI.
+- **Opt-out prefix:** Prefix any prompt with `[norecord]` to skip tracking for that turn.
+- **File Context Capture:** Automatically saves copies of working files (if ≤20 files) or `ls -lh` filesystem state (if >20 files) at the end of each session.
+- **Session Grouping:** Logs are organized into agent-specific directories (`~/.claude/bash_tracing/` and `~/.codex/bash_tracing/`) with dedicated subdirectories per session.
 
-- [Claude Code](https://code.claude.com) installed
-- `jq` installed (`brew install jq` on macOS)
+## Installation
 
-### Install & Test
+### Claude Code
 
 ```bash
 # Load the plugin directly from this directory
-claude --plugin-dir ./claude-code-plugin
+claude --plugin-dir ./bash-script-logger/claude-code-plugin
 ```
 
-That's it. Bash Script Logger will silently log every bash command Claude runs.
+### OpenAI Codex CLI
 
-### Check your logs
-
-```bash
-# View the last 5 logged commands
-tail -5 ~/.bash-script-logger/telemetry.jsonl | jq .
-
-# Or use the built-in skill inside Claude Code
-/bash-script-logger:report
-```
-
-### View raw telemetry
+Run the included installer to merge the hooks into your Codex configuration:
 
 ```bash
-# Count total commands logged
-wc -l ~/.bash-script-logger/telemetry.jsonl
-
-# See all failed commands
-jq 'select(.exit_code != 0)' ~/.bash-script-logger/telemetry.jsonl
-
-# See commands from a specific session
-jq 'select(.session_id == "YOUR_SESSION_ID")' ~/.bash-script-logger/telemetry.jsonl
+bash ./bash-script-logger/codex-plugin/install-codex.sh
 ```
 
 ## How It Works
 
-Bash Script Logger uses two hooks that fire during Claude Code's lifecycle:
+Bash Script Logger uses three lifecycle hooks:
 
-| Hook | Event | Script | Purpose |
-|:-----|:------|:-------|:--------|
-| `UserPromptSubmit` | User types a message | `capture-prompt.sh` | Saves the user's prompt to `~/.bash-script-logger/.last_prompt` |
-| `PostToolUse` (Bash) | Claude finishes a bash command | `log-bash.sh` | Logs the command + output + prompt to `~/.bash-script-logger/telemetry.jsonl` |
+| Hook | Script | Purpose |
+|:-----|:-------|:--------|
+| `UserPromptSubmit` | `capture-prompt.sh` | Saves the user's prompt (or skips if `[norecord]` is used). |
+| `PostToolUse` (Bash)| `log-bash.sh` | Logs the command + output + prompt to `telemetry.jsonl`. |
+| `Stop` | `capture-context.sh`| Captures file state or copies files into the session directory. |
 
-
-### Log entry format (JSONL)
-
-Each line in `~/.bash-script-logger/telemetry.jsonl` is a JSON object:
+### Telemetry Format (JSONL)
 
 ```json
 {
-  "timestamp": "2026-06-11T20:00:00Z",
-  "agent": "claude-code",
+  "timestamp": "2026-06-23T10:00:00Z",
+  "agent": "codex",
   "session_id": "abc-123",
-  "user_prompt": "Find all Python files that import os",
-  "prompt_timestamp": "2026-06-11T19:59:55Z",
-  "bash_command": "find . -name '*.py' | xargs grep 'import os'",
-  "exit_code": 0,
-  "stdout_preview": "src/main.py:import os...",
-  "stderr_preview": "",
+  "user_prompt": "Find all Python files",
+  "prompt_timestamp": "2026-06-23T09:59:55Z",
+  "bash_command": "find . -name '*.py'",
+  "exit_code": null,
+  "stdout_preview": null,
+  "stderr_preview": null,
+  "tool_response": "src/main.py...",
   "category": "",
   "summary": ""
 }
 ```
+*(Note: Codex groups output into `tool_response`, whereas Claude Code provides structured `exit_code`, `stdout_preview`, and `stderr_preview`.)*
 
+## Analysis
+
+Use the included analysis script to generate a report from both Claude Code and Codex logs:
+
+```bash
+bash ./bash-script-logger/scripts/analyze.sh
+```

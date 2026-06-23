@@ -29,13 +29,17 @@ fi
 # 2. Install hooks.json (merge with existing, don't overwrite)
 NEW_HOOKS="$PLUGIN_DIR/.codex/hooks.json"
 EXISTING_HOOKS="$CODEX_DIR/hooks.json"
+
+# Replace <HOME> placeholder with actual $HOME path
+TMP_HOOKS=$(mktemp)
+sed "s|<HOME>|$HOME|g" "$NEW_HOOKS" > "$TMP_HOOKS"
 if [ -f "$EXISTING_HOOKS" ]; then
     # Check if our hooks are already installed (avoid duplicates on re-run)
-    if grep -q "capture-prompt.sh" "$EXISTING_HOOKS" && grep -q "log-bash.sh" "$EXISTING_HOOKS"; then
+    if grep -q "capture-prompt.sh" "$EXISTING_HOOKS" && grep -q "log-bash.sh" "$EXISTING_HOOKS" && grep -q "capture-context.sh" "$EXISTING_HOOKS"; then
         echo "~/.codex/hooks.json already contains Bash Script Logger hooks."
     else
         # for each event type in our hooks, append our entries to the existing array.
-        MERGED=$(jq --slurpfile new "$NEW_HOOKS" '
+        MERGED=$(jq --slurpfile new "$TMP_HOOKS" '
             reduce ($new[0].hooks | keys[]) as $event (.;
                 .hooks[$event] = ((.hooks[$event] // []) + $new[0].hooks[$event])
             )
@@ -44,19 +48,23 @@ if [ -f "$EXISTING_HOOKS" ]; then
         echo "Merged Bash Script Logger hooks into existing ~/.codex/hooks.json."
     fi
 else
-    cp "$NEW_HOOKS" "$EXISTING_HOOKS"
+    cp "$TMP_HOOKS" "$EXISTING_HOOKS"
     echo "Created ~/.codex/hooks.json."
 fi
+
+rm -f "$TMP_HOOKS"
 
 
 # 3. Install the hook scripts
 # - uses the same scripts as the Claude Code plugin.
 cp "$ROOT_DIR/claude-code-plugin/scripts/capture-prompt.sh" "$HOOKS_DIR/"
 cp "$ROOT_DIR/claude-code-plugin/scripts/log-bash.sh" "$HOOKS_DIR/"
+cp "$ROOT_DIR/claude-code-plugin/scripts/capture-context.sh" "$HOOKS_DIR/"
 
 # Ensure they are executable
 chmod +x "$HOOKS_DIR/capture-prompt.sh"
 chmod +x "$HOOKS_DIR/log-bash.sh"
+chmod +x "$HOOKS_DIR/capture-context.sh"
 
 echo "Installed hook scripts to ~/.codex/hooks/."
 
