@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/plugin/claude-code-plugin/scripts/log-bash.sh",
+            "timeout": 10,
+            "statusMessage": "Bash Script Logger: logging bash command..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/plugin/claude-code-plugin/scripts/capture-context.sh",
+            "timeout": 15,
+            "statusMessage": "Bash Script Logger: capturing file context..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/plugin/claude-code-plugin/scripts/capture-prompt.sh",
+            "timeout": 5,
+            "statusMessage": "Bash Script Logger: capturing prompt..."
+          }
+        ]
+      }
+    ]
+  }
+}

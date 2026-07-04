@@ -37,7 +37,8 @@ Bash Script Logger uses three lifecycle hooks:
 | Hook | Script | Purpose |
 |:-----|:-------|:--------|
 | `UserPromptSubmit` | `capture-prompt.sh` | Saves the user's prompt (or skips if `[norecord]` is used). |
-| `PostToolUse` (Bash)| `log-bash.sh` | Logs the command + output + prompt to `telemetry.jsonl`. |
+| `PreToolUse` | `pre-tool-use.sh` | Records the exact nanosecond timestamp immediately before process spawn. |
+| `PostToolUse` (Bash)| `log-bash.sh` | Calculates pure shell execution latency and logs command data to `telemetry.jsonl`. |
 | `Stop` | `capture-context.sh`| Captures file state or copies files into the session directory. |
 
 ### Telemetry Format (JSONL)
@@ -45,6 +46,8 @@ Bash Script Logger uses three lifecycle hooks:
 ```json
 {
   "timestamp": "2026-06-23T10:00:00Z",
+  "cmd_start_timestamp": "2026-06-23T10:00:01Z",
+  "duration_ms": 273,
   "agent": "codex",
   "session_id": "abc-123",
   "user_prompt": "Find all Python files",

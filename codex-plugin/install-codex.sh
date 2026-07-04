@@ -13,6 +13,28 @@ echo "Installing Bash Script Logger for OpenAI Codex CLI..."
 mkdir -p "$CODEX_DIR"
 mkdir -p "$HOOKS_DIR"
 
+# 0. Install Codex CLI if not found
+export PATH="$HOME/.local/bin:$PATH"
+if command -v codex &>/dev/null; then
+    echo "Codex CLI found: $(codex --version 2>/dev/null || echo 'installed')"
+else
+    echo "Codex CLI not found, installing..."
+    if command -v curl &>/dev/null; then
+        echo "N" | curl -fsSL https://chatgpt.com/codex/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+        if command -v codex &>/dev/null; then
+            echo "Codex CLI installed successfully."
+        else
+            echo "WARNING: Codex CLI install may have failed."
+            echo "  Try manually: curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+        fi
+    else
+        echo "WARNING: curl not found, cannot auto-install Codex CLI."
+        echo "  Install curl first, or install Codex manually:"
+        echo "  curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+    fi
+fi
+
 # 1. Install config.toml (merge or create)
 if [ -f "$CODEX_DIR/config.toml" ]; then
     if ! grep -q "hooks = true" "$CODEX_DIR/config.toml"; then
@@ -60,11 +82,13 @@ rm -f "$TMP_HOOKS"
 cp "$ROOT_DIR/claude-code-plugin/scripts/capture-prompt.sh" "$HOOKS_DIR/"
 cp "$ROOT_DIR/claude-code-plugin/scripts/log-bash.sh" "$HOOKS_DIR/"
 cp "$ROOT_DIR/claude-code-plugin/scripts/capture-context.sh" "$HOOKS_DIR/"
+cp "$ROOT_DIR/claude-code-plugin/scripts/pre-tool-use.sh" "$HOOKS_DIR/"
 
 # Ensure they are executable
 chmod +x "$HOOKS_DIR/capture-prompt.sh"
 chmod +x "$HOOKS_DIR/log-bash.sh"
 chmod +x "$HOOKS_DIR/capture-context.sh"
+chmod +x "$HOOKS_DIR/pre-tool-use.sh"
 
 echo "Installed hook scripts to ~/.codex/hooks/."
 

@@ -1,0 +1,370 @@
+#!/bin/bash
+# bsl — Standalone CLI for Bash Script Logger
+
+#   bsl list-sessions          List all recorded sessions
+#   bsl delete-session <id>    Remove a session's data
+#   bsl clear-history          Wipe all telemetry data
+#   bsl status                 Show plugin status summary
+#   bsl tail [n]               Show the last n logged commands (default: 10)
+#   bsl help                   Show this help message
+# ============================================================
+
+CODEX_DIR="$HOME/.codex/bash_tracing"
+CLAUDE_DIR="$HOME/.claude/bash_tracing"
+ALL_DIRS=()
+
+[ -d "$CODEX_DIR" ] && ALL_DIRS+=("$CODEX_DIR")
+[ -d "$CLAUDE_DIR" ] && ALL_DIRS+=("$CLAUDE_DIR")
+
+# Colors
+BOLD="\033[1m"
+DIM="\033[2m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+RED="\033[31m"
+CYAN="\033[36m"
+RESET="\033[0m"
+
+# ---- Helpers ----
+
+agent_name_for_dir() {
+    case "$1" in
+        */.codex/*) echo "codex" ;;
+        */.claude/*) echo "claude-code" ;;
+        *) echo "unknown" ;;
+    esac
+}
+
+# ---- Commands ----
+
+cmd_help() {
+    echo ""
+    echo -e "${BOLD}bsl${RESET} — Bash Script Logger CLI"
+    echo ""
+    echo -e "${BOLD}Usage:${RESET}"
+    echo "  bsl list-sessions          List all recorded sessions"
+    echo "  bsl delete-session <id>    Remove a specific session"
+    echo "  bsl clear-history          Wipe all telemetry data"
+    echo "  bsl status                 Show plugin status summary"
+    echo "  bsl tail [n]               Show the last n logged commands (default: 10)"
+    echo "  bsl help                   Show this help message"
+    echo ""
+}
+
+cmd_status() {
+    echo ""
+    echo -e "${BOLD}═══════════════════════════════════════${RESET}"
+    echo -e "${BOLD}   Bash Script Logger — Status         ${RESET}"
+    echo -e "${BOLD}═══════════════════════════════════════${RESET}"
+
+    if [ ${#ALL_DIRS[@]} -eq 0 ]; then
+        echo -e "  ${DIM}No telemetry directories found.${RESET}"
+        echo ""
+        return
+    fi
+
+    for DIR in "${ALL_DIRS[@]}"; do
+        AGENT=$(agent_name_for_dir "$DIR")
+
+        # Count sessions (directories that aren't hidden)
+        SESSION_COUNT=$(find "$DIR" -maxdepth 1 -mindepth 1 -type d ! -name '.*' 2>/dev/null | wc -l | tr -d ' ')
+
+        # Count total commands
+        CMD_COUNT=0
+        if [ -f "$DIR/telemetry.jsonl" ]; then
+            CMD_COUNT=$(wc -l < "$DIR/telemetry.jsonl" | tr -d ' ')
+        fi
+
+        # Disk usage
+        DISK=$(du -sh "$DIR" 2>/dev/null | cut -f1)
+
+        # Norecord status
+        NORECORD="${GREEN}off${RESET}"
+        if [ -f "$DIR/.norecord" ]; then
+            NORECORD="${RED}ACTIVE${RESET}"
+        fi
+
+        # Disabled status
+        DISABLED="${GREEN}no${RESET}"
+        if [ -f "$DIR/.disabled" ]; then
+            DISABLED="${RED}YES — logging stopped${RESET}"
+        fi
+
+        echo ""
+        echo -e "  ${CYAN}${BOLD}$AGENT${RESET}"
+        echo -e "  Sessions:    $SESSION_COUNT"
+        echo -e "  Commands:    $CMD_COUNT"
+        echo -e "  Disk usage:  $DISK"
+        echo -e "  Disabled:    $DISABLED"
+        echo -e "  Norecord:    $NORECORD"
+    done
+    echo ""
+}
+
+cmd_list_sessions() {
+    echo ""
+    echo -e "${BOLD}═══════════════════════════════════════${RESET}"
+    echo -e "${BOLD}   Bash Script Logger — Sessions       ${RESET}"
+    echo -e "${BOLD}═══════════════════════════════════════${RESET}"
+
+    if [ ${#ALL_DIRS[@]} -eq 0 ]; then
+        echo -e "  ${DIM}No telemetry directories found.${RESET}"
+        echo ""
+        return
+    fi
+
+    for DIR in "${ALL_DIRS[@]}"; do
+        AGENT=$(agent_name_for_dir "$DIR")
+        echo ""
+        echo -e "  ${CYAN}${BOLD}$AGENT${RESET}"
+
+        FOUND=0
+        for SESSION in "$DIR"/*/; do
+            [ ! -d "$SESSION" ] && continue
+            SESSION_NAME=$(basename "$SESSION")
+            # Skip hidden dirs
+            [[ "$SESSION_NAME" == .* ]] && continue
+
+            # Get creation date
+            CREATED=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$SESSION" 2>/dev/null || stat -c "%y" "$SESSION" 2>/dev/null | cut -d. -f1)
+
+            # Count telemetry entries for this session
+            CMD_COUNT=0
+            if [ -f "$DIR/telemetry.jsonl" ]; then
+                CMD_COUNT=$(grep -c "\"session_id\":\"$SESSION_NAME\"" "$DIR/telemetry.jsonl" 2>/dev/null || echo 0)
+            fi
+
+            # Check what context was captured
+            CONTEXT=""
+            if [ -d "$SESSION/files" ]; then
+                FILE_COUNT=$(ls "$SESSION/files" 2>/dev/null | wc -l | tr -d ' ')
+                CONTEXT="${GREEN}($FILE_COUNT files captured)${RESET}"
+            elif [ -f "$SESSION/filesystem_state.txt" ]; then
+                CONTEXT="${YELLOW}(filesystem snapshot)${RESET}"
+            else
+                CONTEXT="${DIM}(no context)${RESET}"
+            fi
+
+            echo -e "  ${BOLD}$SESSION_NAME${RESET}"
+            echo -e "    Created: $CREATED  |  Commands: $CMD_COUNT  |  $CONTEXT"
+            FOUND=$((FOUND + 1))
+        done
+
+        if [ "$FOUND" -eq 0 ]; then
+            echo -e "  ${DIM}(no sessions)${RESET}"
+        fi
+    done
+    echo ""
+}
+
+cmd_delete_session() {
+    SESSION_ID="$1"
+    if [ -z "$SESSION_ID" ]; then
+        echo -e "${RED}Error:${RESET} Please provide a session ID."
+        echo "Usage: bsl delete-session <session-id>"
+        return 1
+    fi
+
+    DELETED=0
+    for DIR in "${ALL_DIRS[@]}"; do
+        if [ -d "$DIR/$SESSION_ID" ]; then
+            rm -rf "$DIR/$SESSION_ID"
+            DELETED=$((DELETED + 1))
+
+            AGENT=$(agent_name_for_dir "$DIR")
+            echo -e "${GREEN}✓${RESET} Removed session directory from $AGENT"
+        fi
+
+        # Also remove matching telemetry lines
+        if [ -f "$DIR/telemetry.jsonl" ]; then
+            BEFORE=$(wc -l < "$DIR/telemetry.jsonl" | tr -d ' ')
+            TEMP=$(mktemp)
+            grep -v "\"session_id\":\"$SESSION_ID\"" "$DIR/telemetry.jsonl" > "$TEMP" 2>/dev/null
+            mv "$TEMP" "$DIR/telemetry.jsonl"
+            AFTER=$(wc -l < "$DIR/telemetry.jsonl" | tr -d ' ')
+            REMOVED=$((BEFORE - AFTER))
+            if [ "$REMOVED" -gt 0 ]; then
+                echo -e "${GREEN}✓${RESET} Removed $REMOVED telemetry entries"
+            fi
+        fi
+    done
+
+    if [ "$DELETED" -eq 0 ]; then
+        echo -e "${YELLOW}Session '$SESSION_ID' not found in any agent directory.${RESET}"
+        return 1
+    fi
+}
+
+cmd_clear_history() {
+    echo -e "${YELLOW}This will permanently delete ALL telemetry data.${RESET}"
+    printf "Are you sure? [y/N] "
+    read -r CONFIRM
+    if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+        echo "Cancelled."
+        return
+    fi
+
+    for DIR in "${ALL_DIRS[@]}"; do
+        AGENT=$(agent_name_for_dir "$DIR")
+
+        # Remove all session directories
+        for SESSION in "$DIR"/*/; do
+            [ -d "$SESSION" ] && rm -rf "$SESSION"
+        done
+
+        # Clear telemetry file
+        if [ -f "$DIR/telemetry.jsonl" ]; then
+            > "$DIR/telemetry.jsonl"
+        fi
+
+        # Clean up state files
+        rm -f "$DIR/.last_prompt" "$DIR/.norecord"
+
+        echo -e "${GREEN}✓${RESET} Cleared all data for $AGENT"
+    done
+    echo -e "${GREEN}Done.${RESET}"
+}
+
+cmd_tail() {
+    COUNT="${1:-10}"
+    echo ""
+    echo -e "${BOLD}═══════════════════════════════════════${RESET}"
+    echo -e "${BOLD}   Last $COUNT Logged Commands              ${RESET}"
+    echo -e "${BOLD}═══════════════════════════════════════${RESET}"
+
+    # Merge all telemetry files and sort by timestamp, take last N
+    MERGED=$(mktemp)
+    for DIR in "${ALL_DIRS[@]}"; do
+        if [ -f "$DIR/telemetry.jsonl" ]; then
+            cat "$DIR/telemetry.jsonl" >> "$MERGED"
+        fi
+    done
+
+    if [ ! -s "$MERGED" ]; then
+        echo -e "  ${DIM}No telemetry data found.${RESET}"
+        rm -f "$MERGED"
+        echo ""
+        return
+    fi
+
+    # Sort by timestamp and take last N
+    sort -t'"' -k4 "$MERGED" | tail -n "$COUNT" | while IFS= read -r LINE; do
+        AGENT=$(echo "$LINE" | jq -r '.agent // "?"' 2>/dev/null)
+        TS=$(echo "$LINE" | jq -r '.timestamp // "?"' 2>/dev/null)
+        CMD=$(echo "$LINE" | jq -r '.bash_command // "?"' 2>/dev/null)
+        PROMPT=$(echo "$LINE" | jq -r '.user_prompt // ""' 2>/dev/null)
+
+        echo ""
+        echo -e "  ${DIM}$TS${RESET}  ${CYAN}[$AGENT]${RESET}"
+        if [ -n "$PROMPT" ] && [ "$PROMPT" != "null" ]; then
+            echo -e "  ${DIM}Prompt:${RESET} $PROMPT"
+        fi
+        echo -e "  ${BOLD}\$ $CMD${RESET}"
+    done
+
+    rm -f "$MERGED"
+    echo ""
+}
+
+cmd_disable() {
+    for DIR in "$CODEX_DIR" "$CLAUDE_DIR"; do
+        mkdir -p "$DIR"
+        touch "$DIR/.disabled"
+    done
+    echo -e "${YELLOW}Plugin disabled.${RESET} Logging will stop across all sessions."
+    echo -e "Run ${BOLD}bsl enable${RESET} to resume."
+}
+
+cmd_enable() {
+    for DIR in "$CODEX_DIR" "$CLAUDE_DIR"; do
+        rm -f "$DIR/.disabled"
+    done
+    echo -e "${GREEN}Plugin re-enabled.${RESET} Logging is active."
+}
+
+cmd_uninstall() {
+    echo -e "${YELLOW}This will remove Bash Script Logger hooks from Codex and Claude Code.${RESET}"
+    echo -e "${DIM}Your telemetry data will be kept. Use 'bsl clear-history' to delete it.${RESET}"
+    printf "Are you sure? [y/N] "
+    read -r CONFIRM
+    if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
+        echo "Cancelled."
+        return
+    fi
+
+    for AGENT_DIR in "$HOME/.codex" "$HOME/.claude"; do
+        AGENT_NAME=$(basename "$AGENT_DIR")
+        HOOKS_DIR="$AGENT_DIR/hooks"
+
+        # Remove BSL hook scripts (only ours, not other hooks)
+        if [ -d "$HOOKS_DIR" ]; then
+            for SCRIPT in capture-prompt.sh log-bash.sh capture-context.sh; do
+                if [ -f "$HOOKS_DIR/$SCRIPT" ]; then
+                    rm -f "$HOOKS_DIR/$SCRIPT"
+                    echo -e "${GREEN}✓${RESET} Removed $AGENT_NAME/hooks/$SCRIPT"
+                fi
+            done
+        fi
+
+        # Surgically remove BSL entries from hooks.json (keep other hooks intact)
+        HOOKS_JSON="$AGENT_DIR/hooks.json"
+        if [ -f "$HOOKS_JSON" ] && command -v jq >/dev/null 2>&1; then
+            CLEANED=$(jq '
+                .hooks |= with_entries(
+                    .value |= map(
+                        if .hooks then
+                            .hooks |= map(select(.command | test("capture-prompt\\.sh|log-bash\\.sh|capture-context\\.sh") | not))
+                            | select(.hooks | length > 0)
+                        else . end
+                    )
+                    | select(.value | length > 0)
+                )
+            ' "$HOOKS_JSON" 2>/dev/null)
+
+            if [ -n "$CLEANED" ]; then
+                echo "$CLEANED" > "$HOOKS_JSON"
+                echo -e "${GREEN}✓${RESET} Cleaned BSL entries from $AGENT_NAME/hooks.json"
+            fi
+        fi
+    done
+
+    echo ""
+    echo -e "${GREEN}Uninstall complete.${RESET}"
+    echo -e "To reinstall later: ${BOLD}bash codex-plugin/install-codex.sh${RESET}"
+}
+
+# Main
+
+cmd_help() {
+    echo ""
+    echo -e "${BOLD}bsl${RESET} — Bash Script Logger CLI"
+    echo ""
+    echo -e "${BOLD}Usage:${RESET}"
+    echo "  bsl list-sessions          List all recorded sessions"
+    echo "  bsl delete-session <id>    Remove a specific session"
+    echo "  bsl clear-history          Wipe all telemetry data"
+    echo "  bsl status                 Show plugin status summary"
+    echo "  bsl tail [n]               Show the last n logged commands (default: 10)"
+    echo "  bsl disable                Stop all logging (persists across sessions)"
+    echo "  bsl enable                 Resume logging"
+    echo "  bsl uninstall              Remove BSL hooks (keeps telemetry data)"
+    echo "  bsl help                   Show this help message"
+    echo ""
+}
+
+case "${1:-help}" in
+    status)          cmd_status ;;
+    list-sessions)   cmd_list_sessions ;;
+    delete-session)  cmd_delete_session "$2" ;;
+    clear-history)   cmd_clear_history ;;
+    tail)            cmd_tail "$2" ;;
+    disable)         cmd_disable ;;
+    enable)          cmd_enable ;;
+    uninstall)       cmd_uninstall ;;
+    help|--help|-h)  cmd_help ;;
+    *)
+        echo -e "${RED}Unknown command:${RESET} $1"
+        cmd_help
+        exit 1
+        ;;
+esac

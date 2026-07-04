@@ -17,6 +17,11 @@ MAX_OUTPUT_CHARS=500  # Truncate stdout/stderr to this many characters
 # Create the log directory if it doesn't exist
 mkdir -p "$LOG_DIR"
 
+# Check if plugin is disabled (persists across sessions)
+if [ -f "$LOG_DIR/.disabled" ]; then
+    exit 0
+fi
+
 # Check for [norecord] prefix — user opts out of logging this prompt
 if [ -f "$LOG_DIR/.norecord" ]; then
     exit 0
@@ -27,6 +32,23 @@ INPUT=$(cat)
 
 # The session ID groups all commands from one conversation together.
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
+
+# Compute tool execution duration using the timestamp written by pre-tool-use.sh
+START_NS_FILE="$LOG_DIR/.tool_start_ns_${SESSION_ID}"
+DURATION_MS="null"
+CMD_START_TIMESTAMP="null"
+if [ -f "$START_NS_FILE" ]; then
+    START_NS=$(cat "$START_NS_FILE")
+    END_NS=$(date +%s%N 2>/dev/null)
+    # Only compute if we actually got nanoseconds (not the literal "%N")
+    if [ -n "$START_NS" ] && [ "$START_NS" != "%N" ] && [ -n "$END_NS" ] && [ "$END_NS" != "%N" ]; then
+        DURATION_MS=$(( (END_NS - START_NS) / 1000000 ))
+        # Convert START_NS epoch-ns to an ISO timestamp
+        START_S=$(( START_NS / 1000000000 ))
+        CMD_START_TIMESTAMP=$(date -u -d "@$START_S" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -r "$START_S" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "null")
+    fi
+    rm -f "$START_NS_FILE"
+fi
 
 # The actual bash command that Claude generated and ran.
 CMD_TEXT=$(echo "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null)
@@ -63,8 +85,12 @@ if [ "$AGENT" = "codex" ]; then
         --arg prompt_timestamp "$PROMPT_TIMESTAMP" \
         --arg bash_command "$CMD_TEXT" \
         --arg tool_response "$TOOL_RESPONSE" \
+        --arg cmd_start_timestamp "$CMD_START_TIMESTAMP" \
+        --argjson duration_ms "$DURATION_MS" \
         '{
             timestamp: $timestamp,
+            cmd_start_timestamp: (if $cmd_start_timestamp == "null" then null else $cmd_start_timestamp end),
+            duration_ms: $duration_ms,
             agent: $agent,
             session_id: $session_id,
             user_prompt: $user_prompt,
@@ -93,8 +119,12 @@ else
         --arg exit_code "$EXIT_CODE" \
         --arg stdout_preview "$STDOUT_PREVIEW" \
         --arg stderr_preview "$STDERR_PREVIEW" \
+        --arg cmd_start_timestamp "$CMD_START_TIMESTAMP" \
+        --argjson duration_ms "$DURATION_MS" \
         '{
             timestamp: $timestamp,
+            cmd_start_timestamp: (if $cmd_start_timestamp == "null" then null else $cmd_start_timestamp end),
+            duration_ms: $duration_ms,
             agent: $agent,
             session_id: $session_id,
             user_prompt: $user_prompt,

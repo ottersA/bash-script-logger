@@ -9,6 +9,11 @@ else
 fi
 mkdir -p "$LOG_DIR"
 
+# Check if plugin is disabled (persists across sessions)
+if [ -f "$LOG_DIR/.disabled" ]; then
+    exit 0
+fi
+
 # Claude Code pipes the event data into our script's stdin as JSON.
 INPUT=$(cat)
 

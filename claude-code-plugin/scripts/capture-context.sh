@@ -10,6 +10,11 @@ fi
 
 FILE_THRESHOLD=20
 
+# Check if plugin is disabled (persists across sessions)
+if [ -f "$LOG_DIR/.disabled" ]; then
+    exit 0
+fi
+
 # Check for [norecord] prefix — user opts out of logging this prompt
 if [ -f "$LOG_DIR/.norecord" ]; then
     exit 0
